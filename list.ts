@@ -95,11 +95,15 @@ const homePageController = (req: Request, res: Response) => {
 	}
 };
 
-interface myRequest extends Request {
-	auth: any;
+declare global {
+	namespace Express {
+		interface Request {
+			auth: any;
+		}
+	}
 }
 
-const loginPageController = (req: myRequest, res: Response) => {
+const loginPageController = (req: Request, res: Response) => {
 	if (req.auth) {
 		return res.redirect('/');
 	}

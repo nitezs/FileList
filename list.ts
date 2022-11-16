@@ -95,7 +95,11 @@ const homePageController = (req: Request, res: Response) => {
 	}
 };
 
-const loginPageController = (req: Request, res: Response) => {
+interface myRequest extends Request {
+	auth: any;
+}
+
+const loginPageController = (req: myRequest, res: Response) => {
 	if (req.auth) {
 		return res.redirect('/');
 	}

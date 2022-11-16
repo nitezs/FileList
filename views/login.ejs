@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>登录</title>
+    <link rel="stylesheet" href="/style.css" />
+</head>
+
+<script src="/axios.min.js"></script>
+
+<body class="bg-gray-200">
+    <div class="container mx-auto h-screen flex flex-col justify-center items-center">
+        <div class="shadow-sm rounded-2xl shadow-gray-400 bg-white flex flex-col items-center gap-3 p-10 pt-5">
+            <h1 class="text-2xl mb-3 font-medium">登录</h1>
+            <input id="passwd" placeholder="输入密码"
+                class="h-10 px-2 outline-none bg-gray-100 rounded border-none appearance-none hover:bg-gray-200 focus:bg-gray-200 transition-all duration-150"
+                type="password" />
+            <button id="login"
+                class="bg-blue-400 py-1 rounded w-full text-white hover:bg-blue-500 transition-all duration-150">
+                确定
+            </button>
+        </div>
+    </div>
+</body>
+<script src="/login.js"></script>
+
+</html>

@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import jsonwebtoken from 'jsonwebtoken';
 import { Request, Response } from 'express';
 import { expressjwt } from 'express-jwt';
+import morgan from 'morgan';
 
 type FileType = {
 	name: string;
@@ -123,6 +124,7 @@ const startServer = (port: string) => {
 	const getToken = (req: Request) => {
 		return req.cookies.token ?? null;
 	};
+	app.use(morgan('common'));
 	app.use(express.json());
 	app.use(express.urlencoded({ extended: false }));
 	app.use(cookieParser());

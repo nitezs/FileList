@@ -7,6 +7,17 @@ import { Request, Response } from 'express';
 import { expressjwt } from 'express-jwt';
 import morgan from 'morgan';
 import child_procss from 'child_process';
+import { randomInt } from 'crypto';
+
+let mime: { [x: string]: string };
+
+let downloadList: DownloadItem[] = [];
+
+type DownloadItem = {
+	path: string;
+	id: string;
+	expires: Date;
+};
 
 type FileType = {
 	name: string;
@@ -54,13 +65,74 @@ const removeController = (req: Request, res: Response) => {
 	let { spath } = req.body;
 	let _path = path.join(process.env.ROOT ?? __dirname, spath);
 	if (fs.existsSync(_path)) {
-		child_procss.exec('rm -rf ' + _path, (err) => {
-			console.log(err);
-		});
+		if (process.platform === 'win32') {
+			fs.rmSync(_path, { force: true, recursive: true });
+		} else {
+			child_procss.exec('rm -rf ' + _path, (err) => {
+				console.log(err);
+			});
+		}
+
 		res.json({ success: true });
 	} else {
 		res.sendStatus(404);
 	}
+};
+
+const randomStr = (length: number) => {
+	let t = 'ABCDEFGHJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890';
+	let res = '';
+	do {
+		res = '';
+		for (let i = 0; i < length; i++) {
+			res = res.concat(t[randomInt(0, t.length - 1)]);
+		}
+	} while (existInDownloadList(res));
+	return res;
+};
+
+const existInDownloadList = (str: string) => {
+	for (let e of downloadList) {
+		if (e.id === str) {
+			return true;
+		}
+	}
+	return false;
+};
+
+const getDownloadId = (path: string) => {
+	for (let e of downloadList) {
+		if (e.path === path) {
+			if (typeof e.expires == 'string') {
+				e.expires = new Date(e.expires);
+			}
+			if (e.expires.getTime() < new Date().getTime()) {
+				//到期了
+				e.id = randomStr(10);
+				let date = new Date();
+				date.setHours(date.getHours() + 1);
+				e.expires = date;
+				//保存
+				fs.writeFileSync('./ids.json', JSON.stringify(downloadList));
+				return e.id;
+			} else {
+				return e.id;
+			}
+		}
+	}
+	let date = new Date();
+	let id = randomStr(10);
+	date.setHours(date.getHours() + 1);
+	downloadList.push({
+		path: path,
+		id: id,
+		expires: date,
+	});
+
+	//保存
+	fs.writeFileSync('./ids.json', JSON.stringify(downloadList));
+
+	return id;
 };
 
 const getListController = (req: Request, res: Response) => {
@@ -75,10 +147,12 @@ const homePageController = (req: Request, res: Response) => {
 	);
 	if (fs.existsSync(_path)) {
 		if (fs.statSync(_path).isFile()) {
+			//返回下载文件
 			let _ = _path.split(path.sep);
 			let fileName = _[_.length - 1];
 			res.set({
-				'Content-type': 'application/octet-stream',
+				'Content-Type':
+					mime[path.extname(_path).substring(1)] ?? 'application/octet-stream',
 				'Content-Disposition': 'attachment;filename=' + encodeURI(fileName),
 				'Content-Length': fs.statSync(_path).size,
 			});
@@ -99,6 +173,56 @@ const homePageController = (req: Request, res: Response) => {
 				res.sendStatus(404);
 			}
 		}
+	}
+};
+
+const getDownloadLinkController = (req: Request, res: Response) => {
+	let { spath } = req.body;
+	if (spath) {
+		let id = getDownloadId(spath as string);
+		res.json({
+			success: true,
+			data: {
+				link: '/api/download?id=' + id,
+			},
+		});
+	} else {
+		res.sendStatus(500);
+	}
+};
+
+const downloadController = (req: Request, res: Response) => {
+	let { id } = req.query;
+	let exist = false;
+	if (id) {
+		for (let e of downloadList) {
+			if (id === e.id && e.expires.getTime() > new Date().getTime()) {
+				exist = true;
+				let _path = path.join(process.env.ROOT ?? __dirname, e.path);
+				if (fs.existsSync(_path)) {
+					res.set({
+						'Content-Type':
+							mime[path.extname(_path).substring(1)] ??
+							'application/octet-stream',
+						'Content-Disposition':
+							'attachment;filename=' + encodeURI(path.basename(_path)),
+						'Content-Length': fs.statSync(_path).size,
+					});
+					let readStream = fs.createReadStream(_path);
+					res.sendStatus(200);
+					readStream.pipe(res);
+				} else {
+					res.sendStatus(404);
+				}
+			} else {
+				res.sendStatus(404);
+			}
+		}
+		if (!exist) {
+			res.sendStatus(404);
+		}
+	} else {
+		res.sendStatus(404);
 	}
 };
 
@@ -139,7 +263,7 @@ const startServer = (port: string) => {
 	const getToken = (req: Request) => {
 		return req.cookies.token ?? null;
 	};
-	app.use(morgan('combined'));
+	app.use(morgan('combined')); //请求日志
 	app.use(express.json());
 	app.use(express.urlencoded({ extended: false }));
 	app.use(cookieParser());
@@ -167,6 +291,8 @@ const startServer = (port: string) => {
 	app.post('/api/login', loginActionController);
 	app.post('/api/list', jwtVerify, getListController);
 	app.post('/api/remove', jwtVerify, removeController);
+	app.post('/api/getId', jwtVerify, getDownloadLinkController);
+	app.get('/api/download', downloadController);
 	//app.post('/api/mkDir', jwtVerify);
 	//app.post('/api/rename', jwtVerify);
 	//app.post('/api/move', jwtVerify);
@@ -191,6 +317,12 @@ const startServer = (port: string) => {
 };
 
 const main = () => {
+	mime = JSON.parse(
+		fs.readFileSync(path.join(__dirname, './mime.json')).toString()
+	);
+	if (fs.existsSync('./ids.json')) {
+		downloadList = JSON.parse(fs.readFileSync('./ids.json').toString());
+	}
 	require('dotenv').config(); //加载配置文件
 	startServer(process.env.PORT ?? '');
 };

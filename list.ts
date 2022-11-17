@@ -6,6 +6,7 @@ import jsonwebtoken from 'jsonwebtoken';
 import { Request, Response } from 'express';
 import { expressjwt } from 'express-jwt';
 import morgan from 'morgan';
+import child_procss from 'child_process';
 
 type FileType = {
 	name: string;
@@ -52,8 +53,14 @@ const getFiles = (cpath: string) => {
 const removeController = (req: Request, res: Response) => {
 	let { spath } = req.body;
 	let _path = path.join(process.env.ROOT ?? __dirname, spath);
-	fs.rmSync(_path, { force: true, recursive: true });
-	res.json({ success: true });
+	if (fs.existsSync(_path)) {
+		child_procss.exec('rm -rf ' + _path, (err) => {
+			console.log(err);
+		});
+		res.json({ success: true });
+	} else {
+		res.sendStatus(404);
+	}
 };
 
 const getListController = (req: Request, res: Response) => {
@@ -132,7 +139,7 @@ const startServer = (port: string) => {
 	const getToken = (req: Request) => {
 		return req.cookies.token ?? null;
 	};
-	app.use(morgan('common'));
+	app.use(morgan('combined'));
 	app.use(express.json());
 	app.use(express.urlencoded({ extended: false }));
 	app.use(cookieParser());
@@ -159,10 +166,10 @@ const startServer = (port: string) => {
 	app.get('/login', jwtVerifyNotRequired, loginPageController);
 	app.post('/api/login', loginActionController);
 	app.post('/api/list', jwtVerify, getListController);
-	app.post('/api/mkDir', jwtVerify);
 	app.post('/api/remove', jwtVerify, removeController);
-	app.post('/api/rename', jwtVerify);
-	app.post('/api/move', jwtVerify);
+	//app.post('/api/mkDir', jwtVerify);
+	//app.post('/api/rename', jwtVerify);
+	//app.post('/api/move', jwtVerify);
 	app.get(/.*?/, jwtVerify, homePageController);
 
 	//开始监听端口

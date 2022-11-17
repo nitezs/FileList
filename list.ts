@@ -1,5 +1,5 @@
 import fs, { createReadStream } from 'fs';
-import express, { NextFunction } from 'express';
+import express, { NextFunction, urlencoded } from 'express';
 import path from 'path';
 import cookieParser from 'cookie-parser';
 import jsonwebtoken from 'jsonwebtoken';
@@ -103,9 +103,6 @@ const existInDownloadList = (str: string) => {
 const getDownloadId = (path: string) => {
 	for (let e of downloadList) {
 		if (e.path === path) {
-			if (typeof e.expires == 'string') {
-				e.expires = new Date(e.expires);
-			}
 			if (e.expires.getTime() < new Date().getTime()) {
 				//到期了
 				e.id = randomStr(10);
@@ -148,16 +145,7 @@ const homePageController = (req: Request, res: Response) => {
 	if (fs.existsSync(_path)) {
 		if (fs.statSync(_path).isFile()) {
 			//返回下载文件
-			let _ = _path.split(path.sep);
-			let fileName = _[_.length - 1];
-			res.set({
-				'Content-Type':
-					mime[path.extname(_path).substring(1)] ?? 'application/octet-stream',
-				'Content-Disposition': 'attachment;filename=' + encodeURI(fileName),
-				'Content-Length': fs.statSync(_path).size,
-			});
-			let readStream = fs.createReadStream(_path);
-			readStream.pipe(res);
+			sendFile(_path, req, res);
 		} else {
 			let list = getFiles(_path);
 			let paths = [];
@@ -191,6 +179,45 @@ const getDownloadLinkController = (req: Request, res: Response) => {
 	}
 };
 
+const sendFile = (_path: string, req: Request, res: Response) => {
+	let range = req.headers.range;
+	let stat = fs.statSync(_path);
+	let extname = path.extname(_path).substring(1);
+	let basename = encodeURI(path.basename(_path));
+	if (!fs.existsSync(_path)) {
+		return res.sendStatus(404);
+	}
+	if (!range) {
+		if (fs.existsSync(_path)) {
+			let headers = {
+				'Content-Range': `bytes 0-${stat.size - 1}/${stat.size}`,
+				'Accept-Ranges': 'bytes',
+				'Content-Type': mime[extname] ?? 'application/octet-stream',
+				'Content-Disposition': 'attachment; filename="' + basename + '"',
+				'Content-Length': stat.size,
+			};
+			res.writeHead(206, headers);
+			let readStream = fs.createReadStream(_path);
+			readStream.pipe(res);
+		}
+	} else {
+		let r = range.replace('bytes=', '').split('-');
+		let start = parseInt(r[0]);
+		let end = r[1] ? parseInt(r[1]) : stat.size - 1;
+		let chunksize = end - start + 1;
+		let headers = {
+			'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+			'Accept-Ranges': 'bytes',
+			'Content-Type': mime[extname] ?? 'application/octet-stream',
+			'Content-Disposition': 'attachment; filename="' + basename + '"',
+			'Content-Length': chunksize,
+		};
+		res.writeHead(206, headers);
+		let readStream = fs.createReadStream(_path, { start, end });
+		readStream.pipe(res);
+	}
+};
+
 const downloadController = (req: Request, res: Response) => {
 	let { id } = req.query;
 	let exist = false;
@@ -199,23 +226,7 @@ const downloadController = (req: Request, res: Response) => {
 			if (id === e.id && e.expires.getTime() > new Date().getTime()) {
 				exist = true;
 				let _path = path.join(process.env.ROOT ?? __dirname, e.path);
-				if (fs.existsSync(_path)) {
-					res.set({
-						'Content-Type':
-							mime[path.extname(_path).substring(1)] ??
-							'application/octet-stream',
-						'Content-Disposition':
-							'attachment;filename=' + encodeURI(path.basename(_path)),
-						'Content-Length': fs.statSync(_path).size,
-					});
-					let readStream = fs.createReadStream(_path);
-					res.sendStatus(200);
-					readStream.pipe(res);
-				} else {
-					res.sendStatus(404);
-				}
-			} else {
-				res.sendStatus(404);
+				sendFile(_path, req, res);
 			}
 		}
 		if (!exist) {
@@ -322,6 +333,11 @@ const main = () => {
 	);
 	if (fs.existsSync('./ids.json')) {
 		downloadList = JSON.parse(fs.readFileSync('./ids.json').toString());
+		for (let e of downloadList) {
+			if (typeof e.expires == 'string') {
+				e.expires = new Date(e.expires);
+			}
+		}
 	}
 	require('dotenv').config(); //加载配置文件
 	startServer(process.env.PORT ?? '');

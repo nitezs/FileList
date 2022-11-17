@@ -4,7 +4,7 @@
 
 # 截图
 
-![](#)
+![](https://github.com/nitezs/FileList/blob/master/screenshot/1.png?raw=true)
 
 # 配置文件(.env)
 

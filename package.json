@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "ts-node ./list.ts",
-    "debug": "nodemon ./list.ts"
+    "debug": "nodemon ./list.ts && tailwindcss -w -o ./dist/style.css"
   },
   "keywords": [],
   "author": "",

@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "debug": "ts-node ./list.ts",
-    "start": "nodemon ./list.ts"
+    "start": "ts-node ./list.ts",
+    "debug": "nodemon ./list.ts"
   },
   "keywords": [],
   "author": "",
